@@ -117,6 +117,16 @@ app.post("/pay", async (req, res) => {
     console.log("UID USED:", uid);
     console.log("SENDER PATH:", `wallets/${uid}`);
 
+    const testRef = db.ref(`wallets/${uid}`);
+
+    const before = await testRef.get();
+    console.log("GET BEFORE TXN:", before.val());
+
+    const txn = await testRef.transaction((data) => {
+      console.log("INSIDE TXN:", data);
+      return data;
+    });
+
     // 🔥 SAFETY CHECK (IMPORTANT)
     if (!storedHashedMpin) {
       throw new Error("MPIN not set for this user");
