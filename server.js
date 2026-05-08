@@ -10,8 +10,16 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ==========================
+// 🔥 MIDDLEWARE
+// ==========================
 app.use(bodyParser.json());
 app.use(express.json());
+
+app.use((req, res, next) => {
+  res.setTimeout(30000);
+  next();
+});
 
 // ==========================
 // 🔥 FIREBASE INIT
@@ -19,163 +27,260 @@ app.use(express.json());
 const serviceAccount = JSON.parse(process.env.FIREBASE_ADMIN_CREDENTIALS);
 
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: process.env.FIREBASE_DB_URL,
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: process.env.FIREBASE_DB_URL,
 });
 
 const db = admin.database();
 
 // ==========================
+// 🔥 HEALTH CHECK
+// ==========================
+app.get("/", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "Wallet payment server running",
+  });
+});
+
+// ==========================
 // 🔥 MAIN PAYMENT ROUTE
 // ==========================
 app.post("/pay", async (req, res) => {
-    try {
-        const {
-            idToken,
-            walletId,
-            mpin,
-            amount,
-            purpose,
-            remarks,
-            clientTxnId
-        } = req.body;
+  let paymentCompleted = false;
 
-        if (!idToken || !walletId || !mpin || !amount) {
-            return res.status(400).json({
-                status: "FAILED",
-                error: "Missing required fields"
-            });
-        }
+  const { idToken, walletId, mpin, amount, purpose, remarks, clientTxnId } =
+    req.body;
 
-        // ==========================
-        // 🔥 VERIFY FIREBASE USER
-        // ==========================
-        const decoded = await admin.auth().verifyIdToken(idToken);
-        const uid = decoded.uid;
-
-        // ==========================
-        // 🔥 GET USER DATA
-        // ==========================
-        const userRef = db.ref(`wallets/${uid}`);
-        const snapshot = await userRef.once("value");
-
-        if (!snapshot.exists()) {
-            return res.status(404).json({
-                status: "FAILED",
-                error: "Wallet not found"
-            });
-        }
-
-        const userData = snapshot.val();
-
-        const currentBalance = userData.balance || 0;
-        const storedHashedMpin = userData.mpin; // bcrypt hash
-
-        // ==========================
-        // 🔥 VERIFY MPIN (bcrypt)
-        // ==========================
-        const isMpinValid = await bcrypt.compare(mpin, storedHashedMpin);
-
-        if (!isMpinValid) {
-            return res.status(401).json({
-                status: "FAILED",
-                error: "Invalid MPIN"
-            });
-        }
-
-        const paymentAmount = parseInt(amount);
-
-        // ==========================
-        // 🔥 VALIDATION
-        // ==========================
-        if (paymentAmount <= 0) {
-            return res.status(400).json({
-                status: "FAILED",
-                error: "Invalid amount"
-            });
-        }
-
-        if (currentBalance < paymentAmount) {
-            return res.status(400).json({
-                status: "FAILED",
-                error: "Insufficient balance"
-            });
-        }
-
-        if (walletId === userData.walletId) {
-            return res.status(400).json({
-                status: "FAILED",
-                error: "Cannot send money to yourself"
-            });
-        }
-
-        // ==========================
-        // 🔥 TRANSACTION ID
-        // ==========================
-        const transactionId = uuidv4();
-
-        // ==========================
-        // 🔥 UPDATE BALANCE (ATOMIC STYLE)
-        // ==========================
-        const newBalance = currentBalance - paymentAmount;
-
-        await userRef.update({
-            balance: newBalance
-        });
-
-        // ==========================
-        // 🔥 SAVE TRANSACTION
-        // ==========================
-        await db.ref(`transactions/${transactionId}`).set({
-            transactionId,
-            from: uid,
-            to: walletId,
-            amount: paymentAmount,
-            purpose: purpose || "",
-            remarks: remarks || "",
-            status: "SUCCESS",
-            createdAt: Date.now(),
-            clientTxnId: clientTxnId || null
-        });
-
-        // ==========================
-        // 🔥 OPTIONAL: CREDIT RECEIVER
-        // ==========================
-        const receiverSnap = await db.ref(`wallets`).orderByChild("walletId").equalTo(walletId).once("value");
-
-        receiverSnap.forEach(child => {
-            const key = child.key;
-            const data = child.val();
-
-            const updatedBalance = (data.balance || 0) + paymentAmount;
-
-            db.ref(`wallets/${key}`).update({
-                balance: updatedBalance
-            });
-        });
-
-        // ==========================
-        // 🔥 SUCCESS RESPONSE
-        // ==========================
-        return res.json({
-            status: "SUCCESS",
-            transactionId,
-            message: "Payment successful"
-        });
-
-    } catch (error) {
-        console.error("PAYMENT ERROR:", error);
-
-        return res.status(500).json({
-            status: "FAILED",
-            error: "Internal server error"
-        });
+  try {
+    // ==========================
+    // 🔥 VALIDATE INPUT
+    // ==========================
+    if (!idToken || !walletId || !mpin || !amount) {
+      return res.status(400).json({
+        status: "FAILED",
+        error: "Missing required fields",
+      });
     }
+
+    const payAmount = parseFloat(amount);
+
+    if (isNaN(payAmount) || payAmount <= 0) {
+      throw new Error("Invalid amount");
+    }
+
+    // ==========================
+    // 🔥 VERIFY FIREBASE TOKEN
+    // ==========================
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const uid = decoded.uid;
+
+    // ==========================
+    // 🔥 GET SENDER
+    // ==========================
+    const senderRef = db.ref(`wallets/${uid}`);
+    const senderSnap = await senderRef.get();
+
+    if (!senderSnap.exists()) {
+      throw new Error("Sender not found");
+    }
+
+    const senderData = senderSnap.val();
+
+    const senderWalletId = senderData.walletId;
+    const storedHashedMpin = senderData.mpinHash;
+
+    // ==========================
+    // 🔥 PREVENT SELF TRANSFER
+    // ==========================
+    if (walletId === senderWalletId) {
+      throw new Error("Cannot send money to yourself");
+    }
+
+    // ==========================
+    // 🔥 VERIFY MPIN
+    // ==========================
+    const isMpinValid = await bcrypt.compare(mpin, storedHashedMpin);
+
+    if (!isMpinValid) {
+      throw new Error("Invalid MPIN");
+    }
+
+    // ==========================
+    // 🔥 GET RECEIVER
+    // ==========================
+    const receiverSnap = await db
+      .ref("wallets")
+      .orderByChild("walletId")
+      .equalTo(walletId)
+      .get();
+
+    if (!receiverSnap.exists()) {
+      throw new Error("Receiver not found");
+    }
+
+    let receiverKey = null;
+
+    receiverSnap.forEach((snap) => {
+      receiverKey = snap.key;
+    });
+
+    if (!receiverKey) {
+      throw new Error("Receiver lookup failed");
+    }
+
+    const receiverRef = db.ref(`wallets/${receiverKey}`);
+
+    // ==========================
+    // 🔥 DUPLICATE TXN PROTECTION
+    // ==========================
+    if (clientTxnId) {
+      const txnLockRef = db.ref(`clientTransactions/${clientTxnId}`);
+
+      const txnLock = await txnLockRef.transaction((data) => {
+        if (data) {
+          return;
+        }
+
+        return {
+          createdAt: admin.database.ServerValue.TIMESTAMP,
+        };
+      });
+
+      if (!txnLock.committed) {
+        return res.json({
+          status: "SUCCESS",
+          message: "Already processed",
+        });
+      }
+    }
+
+    // ==========================
+    // 🔥 DEBIT SENDER
+    // ==========================
+    const debitResult = await senderRef.transaction((data) => {
+      if (!data) return;
+
+      const balance = data.balance || 0;
+
+      if (balance < payAmount) {
+        return;
+      }
+
+      data.balance = balance - payAmount;
+
+      return data;
+    });
+
+    if (!debitResult.committed) {
+      throw new Error("Insufficient balance");
+    }
+
+    // ==========================
+    // 🔥 CREDIT RECEIVER
+    // ==========================
+    try {
+      await receiverRef.transaction((data) => {
+        if (!data) {
+          return {
+            balance: payAmount,
+          };
+        }
+
+        data.balance = (data.balance || 0) + payAmount;
+
+        return data;
+      });
+    } catch (creditError) {
+      // ==========================
+      // 🔥 ROLLBACK SENDER
+      // ==========================
+      await senderRef.transaction((data) => {
+        if (!data) return data;
+
+        data.balance = (data.balance || 0) + payAmount;
+
+        return data;
+      });
+
+      throw new Error("Receiver credit failed");
+    }
+
+    // ==========================
+    // 🔥 SAVE TRANSACTION
+    // ==========================
+    const transactionId = uuidv4();
+
+    const txData = {
+      transactionId,
+      from: senderWalletId,
+      to: walletId,
+      amount: payAmount,
+      purpose: purpose || "",
+      remarks: remarks || "",
+      status: "SUCCESS",
+      createdAt: admin.database.ServerValue.TIMESTAMP,
+      clientTxnId: clientTxnId || null,
+    };
+
+    await db.ref(`transactions/${transactionId}`).set(txData);
+
+    paymentCompleted = true;
+
+    // ==========================
+    // 🔥 SUCCESS RESPONSE
+    // ==========================
+    return res.json({
+      status: "SUCCESS",
+      transactionId,
+      message: "Payment successful",
+    });
+  } catch (error) {
+    console.error("PAYMENT ERROR:", error);
+
+    // ==========================
+    // 🔥 REMOVE TXN LOCK ON FAILURE
+    // ==========================
+    try {
+      if (!paymentCompleted && clientTxnId) {
+        await db.ref(`clientTransactions/${clientTxnId}`).remove();
+      }
+    } catch (lockError) {
+      console.error("LOCK CLEANUP ERROR:", lockError);
+    }
+
+    return res.status(400).json({
+      status: "FAILED",
+      error: error.message || "Internal server error",
+    });
+  }
+});
+
+// ==========================
+// 🔥 404 HANDLER
+// ==========================
+app.use((req, res) => {
+  return res.status(404).json({
+    status: "FAILED",
+    error: "Route not found",
+  });
+});
+
+// ==========================
+// 🔥 GLOBAL ERROR HANDLER
+// ==========================
+app.use((err, req, res, next) => {
+  console.error("UNHANDLED ERROR:", err);
+
+  return res.status(500).json({
+    status: "FAILED",
+    error: "Internal server error",
+  });
 });
 
 // ==========================
 // 🔥 START SERVER
 // ==========================
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
