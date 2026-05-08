@@ -90,9 +90,7 @@ app.post("/pay", async (req, res) => {
 
     // 1. First find sender by walletId
     const senderSnap = await db
-      .ref("wallets")
-      .orderByChild("walletId")
-      .equalTo(senderWalletId)
+      .ref(`wallets/${uid}`)
       .get();
 
     if (!senderSnap.exists()) {
@@ -114,7 +112,7 @@ app.post("/pay", async (req, res) => {
 
     // 3. Extract required fields
     const storedHashedMpin = senderData.mpinHash;
-    const walletId = senderData.walletId;
+    const senderWalletId = senderData.walletId;
 
     // 4. Now (if needed) you can safely use senderRef
     const senderRef = db.ref(`wallets/${senderKey}`);
