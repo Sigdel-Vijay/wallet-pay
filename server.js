@@ -196,24 +196,23 @@ app.post("/pay", async (req, res) => {
     // 🔥 DEBIT SENDER
     // ==========================
     const debitResult = await senderRef.transaction((data) => {
-      if (!data) {
-        return; // abort safely
-      }
+      if (!data) throw new Error("Sender not found");
 
       const balance = Number(data.balance);
 
-      if (isNaN(balance)) {
-        return; // prevent corruption
-      }
+      if (isNaN(balance)) throw new Error("Invalid balance");
 
       if (balance < payAmount) {
-        return; // insufficient
+        throw new Error("Insufficient balance");
       }
 
-      data.balance = Number(balance) - Number(payAmount);
+      data.balance = balance - payAmount;
       return data;
     });
 
+    if (!debitResult.committed) {
+      throw new Error("Debit failed, transaction aborted");
+    }
     // ==========================
     // 🔥 CREDIT RECEIVER
     // ==========================
