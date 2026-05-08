@@ -87,17 +87,27 @@ app.post("/pay", async (req, res) => {
     // ==========================
     // 🔥 GET SENDER
     // ==========================
-    const senderRef = db.ref(`wallets/${uid}`);
-    const senderSnap = await senderRef.get();
+    const senderWalletId = senderData.walletId;
+    const storedHashedMpin = senderData.mpinHash;
+
+    const senderSnap = await db
+      .ref("wallets")
+      .orderByChild("walletId")
+      .equalTo(senderWalletId)
+      .get();
 
     if (!senderSnap.exists()) {
       throw new Error("Sender not found");
     }
 
-    const senderData = senderSnap.val();
+    let senderKey = null;
 
-    const senderWalletId = senderData.walletId;
-    const storedHashedMpin = senderData.mpinHash;
+    senderSnap.forEach((snap) => {
+      senderKey = snap.key;
+    });
+
+    const senderRef = db.ref(`wallets/${senderKey}`);
+    const senderData = (await senderRef.get()).val();
 
     // ==========================
     // 🔥 PREVENT SELF TRANSFER
