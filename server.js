@@ -159,16 +159,17 @@ app.post("/pay", async (req, res) => {
     // 🔥 DEBIT SENDER
     // ==========================
     const debitResult = await senderRef.transaction((data) => {
-      if (!data) return;
+      console.log("TXN RUN:", data);
 
-      const balance = Number(data.balance) || 0;
+      const balance = Number(data?.balance) || 0;
+      console.log("BALANCE:", balance, "PAY:", payAmount);
 
       if (balance < payAmount) {
+        console.log("ABORT: insufficient");
         return;
       }
 
       data.balance = balance - payAmount;
-
       return data;
     });
 
