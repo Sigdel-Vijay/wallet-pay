@@ -361,7 +361,7 @@ app.post("/pay", async (req, res) => {
     // ==========================
     return res.json({
       status: "SUCCESS",
-      transactionId,
+      clientTxnId: clientTxnId,
       message: "Payment successful",
     });
   } catch (error) {
