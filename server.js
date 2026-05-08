@@ -33,6 +33,17 @@ admin.initializeApp({
 
 const db = admin.database();
 
+// =============================
+// ✅ HELPER: SANITIZE DATA FOR FCM
+// =============================
+const toStringData = (obj) => {
+  const result = {};
+  for (const key in obj) {
+    result[key] = String(obj[key] ?? "");
+  }
+  return result;
+};
+
 // ==========================
 // 🔥 HEALTH CHECK
 // ==========================
@@ -75,7 +86,6 @@ app.post("/pay", async (req, res) => {
     const decoded = await admin.auth().verifyIdToken(idToken);
     const uid = decoded.uid;
 
-
     // ==========================
     // 🔥 GET SENDER
     // ==========================
@@ -98,7 +108,6 @@ app.post("/pay", async (req, res) => {
     const senderWalletId = senderData.walletId;
 
     const senderAvailableBalance = Number(senderData.balance) || 0;
-
 
     // 🔥 SAFETY CHECK (IMPORTANT)
     if (!storedHashedMpin) {
@@ -135,9 +144,11 @@ app.post("/pay", async (req, res) => {
     }
 
     let receiverKey = null;
+    let receiverData = null;
 
     receiverSnap.forEach((snap) => {
       receiverKey = snap.key;
+      receiverData = snap.val();
     });
 
     if (!receiverKey) {
@@ -224,10 +235,9 @@ app.post("/pay", async (req, res) => {
     // ==========================
     // 🔥 SAVE TRANSACTION
     // ==========================
-    const transactionId = uuidv4();
 
     const txData = {
-      transactionId,
+      id: clientTxnId,
       from: senderWalletId,
       to: walletId,
       amount: payAmount,
@@ -236,13 +246,115 @@ app.post("/pay", async (req, res) => {
       status: "SUCCESS",
       createdAt: admin.database.ServerValue.TIMESTAMP,
       clientTxnId: clientTxnId || null,
+      notificationSent: false,
     };
 
-    await db.ref(`transactions/${transactionId}`).set(txData);
+    let transactionRef = db.ref(`transactions/${clientTxnId}`);
+
+    await transactionRef.set(txData);
 
     paymentCompleted = true;
 
-    
+    // ==========================
+    //  🔔 SEND NOTIFICATION
+    // ==========================
+
+    const txSnap = await transactionRef.get();
+    const tx = txSnap.val();
+
+    if (tx.status === "SUCCESS" && !tx.notificationSent) {
+      const senderTokensSnap = await db.ref(`fcmTokens/users/${uid}`).get();
+      const receiverTokensSnap = await db
+        .ref(`fcmTokens/users/${receiverKey}`)
+        .get();
+
+      let senderTokens = [];
+
+      let receiverTokens = [];
+
+      if (receiverTokensSnap.exists()) {
+        const tokensObj = receiverTokensSnap.val();
+        receiverTokens = Object.keys(tokensObj);
+      }
+
+      const tasks = [];
+
+      if (senderTokensSnap.exists()) {
+        const tokensObj = senderTokensSnap.val();
+        senderTokens = Object.keys(tokensObj);
+      }
+
+      if (senderTokens.length > 0) {
+        tasks.push({
+          type: "sender",
+          tokens: senderTokens,
+          promise: admin.messaging().sendEachForMulticast({
+            tokens: senderTokens,
+            data: toStringData({
+              title: "Payment Successful",
+              body: `Paid NPR ${payAmount.toFixed(2)} to ${receiverData.walletId}`,
+              type: "payment",
+              amount: payAmount.toFixed(2),
+              senderName: senderData.name,
+              receiverName: receiverData.name,
+              transactionType: "sent",
+              transactionId: clientTxnId,
+            }),
+          }),
+        });
+      }
+
+      if (receiverTokens.length > 0) {
+        tasks.push({
+          type: "receiver",
+          tokens: receiverTokens,
+          promise: admin.messaging().sendEachForMulticast({
+            tokens: receiverTokens,
+            data: toStringData({
+              title: "Payment Received",
+              body: `Received NPR ${payAmount.toFixed(2)} from ${senderData.walletId}`,
+              type: "payment",
+              amount: payAmount.toFixed(2),
+              senderName: senderData.name,
+              receiverName: receiverData.name,
+              transactionType: "received",
+              transactionId: clientTxnId,
+            }),
+          }),
+        });
+      }
+
+      try {
+        const results = await Promise.all(tasks.map((t) => t.promise));
+
+        // cleanup
+        results.forEach((res, i) => {
+          const { type, tokens } = tasks[i];
+
+          res.responses.forEach((r, idx) => {
+            if (!r.success) {
+              const badToken = tokens[idx];
+
+              if (type === "sender") {
+                db.ref(`fcmTokens/users/${uid}/${badToken}`).remove();
+              } else {
+                db.ref(
+                  `fcmTokens/users/${receiverKey}/${badToken}`,
+                ).remove();
+              }
+            }
+          });
+        });
+
+        await transactionRef.update({ notificationSent: true });
+      } catch (err) {
+        console.error("Notification failed:", err);
+
+        await transactionRef.update({
+          notificationError: err.message,
+        });
+      }
+    }
 
     // ==========================
     // 🔥 SUCCESS RESPONSE
