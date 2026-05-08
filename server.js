@@ -75,14 +75,6 @@ app.post("/pay", async (req, res) => {
     const decoded = await admin.auth().verifyIdToken(idToken);
     const uid = decoded.uid;
 
-    console.log("PAYMENT REQUEST:", {
-      uid,
-      walletId,
-      amount: payAmount,
-      purpose,
-      remarks,
-      clientTxnId,
-    });
 
     // ==========================
     // 🔥 GET SENDER
@@ -107,20 +99,6 @@ app.post("/pay", async (req, res) => {
 
     const senderAvailableBalance = Number(senderData.balance) || 0;
 
-    console.log("SENDER DATA:", {
-      senderWalletId: senderWalletId,
-      storedHashedMpin: storedHashedMpin,
-      requestedMpin: mpin,
-      senderAvailableBalance: senderAvailableBalance,
-    });
-
-    console.log("UID USED:", uid);
-    console.log("SENDER PATH:", `wallets/${uid}`);
-
-    const testRef = db.ref(`wallets/${uid}`);
-
-    const before = await testRef.get();
-    console.log("GET BEFORE TXN:", before.val());
 
     // 🔥 SAFETY CHECK (IMPORTANT)
     if (!storedHashedMpin) {
@@ -197,8 +175,6 @@ app.post("/pay", async (req, res) => {
     // ==========================
     const debitResult = await senderRef.transaction((data) => {
       if (!data) throw new Error("Sender not found");
-
-      console.log("INSIDE TXN:", data);
 
       const balance = Number(data.balance);
 
