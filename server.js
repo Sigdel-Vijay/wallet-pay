@@ -198,6 +198,8 @@ app.post("/pay", async (req, res) => {
     const debitResult = await senderRef.transaction((data) => {
       if (!data) throw new Error("Sender not found");
 
+      console.log("INSIDE TXN:", data);
+
       const balance = Number(data.balance);
 
       if (isNaN(balance)) throw new Error("Invalid balance");
