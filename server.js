@@ -105,10 +105,13 @@ app.post("/pay", async (req, res) => {
     const storedHashedMpin = senderData.mpinHash;
     const senderWalletId = senderData.walletId;
 
+    const senderAvailableBalance = Number(senderData.balance) || 0;
+
     console.log("SENDER DATA:", {
       senderWalletId: senderWalletId,
       storedHashedMpin: storedHashedMpin,
       requestedMpin: mpin,
+      senderAvailableBalance: senderAvailableBalance,
     });
 
     // 🔥 SAFETY CHECK (IMPORTANT)
