@@ -88,34 +88,32 @@ app.post("/pay", async (req, res) => {
     // 🔥 GET SENDER
     // ==========================
 
-    // 1. First find sender by walletId
-    const senderSnap = await db
-      .ref(`wallets/${uid}`)
-      .get();
+    // 🔥 GET SENDER (FIXED)
+    const senderSnap = await db.ref(`wallets/${uid}`).get();
 
     if (!senderSnap.exists()) {
       throw new Error("Sender not found");
     }
 
-    let senderKey = null;
-    let senderData = null;
+    const senderData = senderSnap.val();
 
-    senderSnap.forEach((snap) => {
-      senderKey = snap.key;
-      senderData = snap.val();
-    });
-
-    // 2. Safety check
     if (!senderData) {
       throw new Error("Sender data missing");
     }
 
-    // 3. Extract required fields
     const storedHashedMpin = senderData.mpinHash;
     const senderWalletId = senderData.walletId;
 
-    // 4. Now (if needed) you can safely use senderRef
-    const senderRef = db.ref(`wallets/${senderKey}`);
+    console.log("SENDER DATA:", {
+      senderWalletId: senderWalletId,
+      storedHashedMpin: storedHashedMpin,
+      requestedMpin: mpin,
+    });
+
+    // 🔥 SAFETY CHECK (IMPORTANT)
+    if (!storedHashedMpin) {
+      throw new Error("MPIN not set for this user");
+    }
 
     // ==========================
     // 🔥 PREVENT SELF TRANSFER
