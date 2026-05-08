@@ -87,9 +87,8 @@ app.post("/pay", async (req, res) => {
     // ==========================
     // 🔥 GET SENDER
     // ==========================
-    const senderWalletId = senderData.walletId;
-    const storedHashedMpin = senderData.mpinHash;
 
+    // 1. First find sender by walletId
     const senderSnap = await db
       .ref("wallets")
       .orderByChild("walletId")
@@ -101,13 +100,24 @@ app.post("/pay", async (req, res) => {
     }
 
     let senderKey = null;
+    let senderData = null;
 
     senderSnap.forEach((snap) => {
       senderKey = snap.key;
+      senderData = snap.val();
     });
 
+    // 2. Safety check
+    if (!senderData) {
+      throw new Error("Sender data missing");
+    }
+
+    // 3. Extract required fields
+    const storedHashedMpin = senderData.mpinHash;
+    const walletId = senderData.walletId;
+
+    // 4. Now (if needed) you can safely use senderRef
     const senderRef = db.ref(`wallets/${senderKey}`);
-    const senderData = (await senderRef.get()).val();
 
     // ==========================
     // 🔥 PREVENT SELF TRANSFER
