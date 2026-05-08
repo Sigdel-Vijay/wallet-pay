@@ -114,6 +114,9 @@ app.post("/pay", async (req, res) => {
       senderAvailableBalance: senderAvailableBalance,
     });
 
+    console.log("UID USED:", uid);
+    console.log("SENDER PATH:", `wallets/${uid}`);
+
     // 🔥 SAFETY CHECK (IMPORTANT)
     if (!storedHashedMpin) {
       throw new Error("MPIN not set for this user");
