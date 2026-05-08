@@ -89,7 +89,8 @@ app.post("/pay", async (req, res) => {
     // ==========================
 
     // 🔥 GET SENDER (FIXED)
-    const senderSnap = await db.ref(`wallets/${uid}`).get();
+    const senderRef = db.ref(`wallets/${uid}`);
+    const senderSnap = await senderRef.get();
 
     if (!senderSnap.exists()) {
       throw new Error("Sender not found");
