@@ -122,11 +122,6 @@ app.post("/pay", async (req, res) => {
     const before = await testRef.get();
     console.log("GET BEFORE TXN:", before.val());
 
-    const txn = await testRef.transaction((data) => {
-      console.log("INSIDE TXN:", data);
-      return data;
-    });
-
     // 🔥 SAFETY CHECK (IMPORTANT)
     if (!storedHashedMpin) {
       throw new Error("MPIN not set for this user");
@@ -201,23 +196,23 @@ app.post("/pay", async (req, res) => {
     // 🔥 DEBIT SENDER
     // ==========================
     const debitResult = await senderRef.transaction((data) => {
-      console.log("TXN RUN:", data);
+      if (!data) {
+        return; // abort safely
+      }
 
-      const balance = Number(data?.balance) || 0;
-      console.log("BALANCE:", balance, "PAY:", payAmount);
+      const balance = Number(data.balance);
+
+      if (isNaN(balance)) {
+        return; // prevent corruption
+      }
 
       if (balance < payAmount) {
-        console.log("ABORT: insufficient");
-        return;
+        return; // insufficient
       }
 
       data.balance = balance - payAmount;
       return data;
     });
-
-    if (!debitResult.committed) {
-      throw new Error("Insufficient balance");
-    }
 
     // ==========================
     // 🔥 CREDIT RECEIVER
