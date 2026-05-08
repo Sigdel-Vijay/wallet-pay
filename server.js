@@ -161,7 +161,7 @@ app.post("/pay", async (req, res) => {
     const debitResult = await senderRef.transaction((data) => {
       if (!data) return;
 
-      const balance = data.balance || 0;
+      const balance = Number(data.balance) || 0;
 
       if (balance < payAmount) {
         return;
