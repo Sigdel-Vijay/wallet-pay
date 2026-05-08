@@ -210,7 +210,7 @@ app.post("/pay", async (req, res) => {
         return; // insufficient
       }
 
-      data.balance = balance - payAmount;
+      data.balance = Number(balance) - Number(payAmount);
       return data;
     });
 
