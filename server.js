@@ -161,7 +161,7 @@ app.post("/pay", async (req, res) => {
     // 🔥 DUPLICATE TXN PROTECTION
     // ==========================
     if (clientTxnId) {
-      const txnLockRef = db.ref(`clientTransactions/${clientTxnId}`);
+      const txnLockRef = db.ref(`transactions/${clientTxnId}`);
 
       const txnLock = await txnLockRef.transaction((data) => {
         if (data) {
