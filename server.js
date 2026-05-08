@@ -75,6 +75,15 @@ app.post("/pay", async (req, res) => {
     const decoded = await admin.auth().verifyIdToken(idToken);
     const uid = decoded.uid;
 
+    console.log("PAYMENT REQUEST:", {
+      uid,
+      walletId,
+      amount: payAmount,
+      purpose,
+      remarks,
+      clientTxnId,
+    });
+
     // ==========================
     // 🔥 GET SENDER
     // ==========================
