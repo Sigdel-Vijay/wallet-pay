@@ -372,7 +372,7 @@ app.post("/pay", async (req, res) => {
     // ==========================
     try {
       if (!paymentCompleted && clientTxnId) {
-        await db.ref(`clientTransactions/${clientTxnId}`).remove();
+        await db.ref(`transactions/${clientTxnId}`).remove();
       }
     } catch (lockError) {
       console.error("LOCK CLEANUP ERROR:", lockError);
