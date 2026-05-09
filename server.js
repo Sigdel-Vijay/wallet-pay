@@ -468,10 +468,6 @@ app.post("/pay", async (req, res) => {
 
       const receiverRef = db.ref(`merchants/${walletId}`);
 
-      console.log("receiverKey", receiverKey);
-      console.log("receiverData", receiverData);
-      console.log("receiverUid", receiverUid);
-
       // ==========================
       // 🔥 DUPLICATE TXN PROTECTION
       // ==========================
