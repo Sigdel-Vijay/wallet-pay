@@ -454,10 +454,12 @@ app.post("/pay", async (req, res) => {
 
       let receiverKey = null;
       let receiverData = null;
+      let receiverUid = null;
 
       receiverSnap.forEach((snap) => {
         receiverKey = snap.key;
         receiverData = snap.val();
+        receiverUid = snap.val().uid; // Assuming the merchant data contains a uid field
       });
 
       if (!receiverKey) {
@@ -577,7 +579,7 @@ app.post("/pay", async (req, res) => {
       if (tx.status === "SUCCESS" && !tx.notificationSent) {
         const senderTokensSnap = await db.ref(`fcmTokens/users/${uid}`).get();
         const receiverTokensSnap = await db
-          .ref(`fcmTokens/merchants/${receiverKey}`)
+          .ref(`fcmTokens/merchants/${receiveru}`)
           .get();
 
         let senderTokens = [];
