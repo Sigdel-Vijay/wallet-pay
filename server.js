@@ -470,6 +470,7 @@ app.post("/pay", async (req, res) => {
 
       console.log("receiverKey", receiverKey);
       console.log("receiverData", receiverData);
+      console.log("receiverUid", receiverUid);
 
       // ==========================
       // 🔥 DUPLICATE TXN PROTECTION
@@ -579,7 +580,7 @@ app.post("/pay", async (req, res) => {
       if (tx.status === "SUCCESS" && !tx.notificationSent) {
         const senderTokensSnap = await db.ref(`fcmTokens/users/${uid}`).get();
         const receiverTokensSnap = await db
-          .ref(`fcmTokens/merchants/${receiveru}`)
+          .ref(`fcmTokens/merchants/${receiverUid}`)
           .get();
 
         let senderTokens = [];
