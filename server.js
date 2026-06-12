@@ -677,24 +677,11 @@ app.post("/pay", async (req, res) => {
         message: "Payment successful",
       });
     } else if (type !== null && type === "merchant_payment") {
+      
+      const orderSnap = await db.ref(`orders/${orderId}`).get();
+      const orderData = orderSnap.val();
 
-
-      const orderRef = db.ref(`orders/${orderId}`);
-
-      const orderTxn = await orderRef.transaction((order) => {
-        if (!order) return;
-
-        if (order.paymentStatus === "PAID") {
-          return;
-        }
-
-        order.paymentStatus = "PROCESSING";
-        order.processingTxnId = clientTxnId;
-
-        return order;
-      });
-
-      if (!orderTxn.committed) {
+      if (orderData.paymentStatus === "PAID") {
         throw new Error("Order already paid");
       }
 
