@@ -677,6 +677,42 @@ app.post("/pay", async (req, res) => {
         message: "Payment successful",
       });
     } else if (type !== null && type === "merchant_payment") {
+      
+      const paymentLockRef = db.ref(`orderPaymentLocks/${orderId}`);
+
+      const lock = await paymentLockRef.transaction((data) => {
+        if (data) return;
+
+        return {
+          txnId: clientTxnId,
+          createdAt: admin.database.ServerValue.TIMESTAMP,
+        };
+      });
+
+      if (!lock.committed) {
+        throw new Error("Order already paid or processing");
+      }
+
+
+      const orderRef = db.ref(`orders/${orderId}`);
+
+      const orderTxn = await orderRef.transaction((order) => {
+        if (!order) return;
+
+        if (order.paymentStatus === "PAID") {
+          return;
+        }
+
+        order.paymentStatus = "PROCESSING";
+        order.processingTxnId = clientTxnId;
+
+        return order;
+      });
+
+      if (!orderTxn.committed) {
+        throw new Error("Order already paid");
+      }
+
       // ==========================
       // 🔥 VALIDATE INPUT
       // ==========================
@@ -891,27 +927,13 @@ app.post("/pay", async (req, res) => {
 
       paymentCompleted = true;
 
-      const orderRef = db.ref(`orders/${orderId}`);
-
-      const orderTxn = await orderRef.transaction((order) => {
-        if (!order) return;
-
-        if (order.paymentStatus === "PAID") {
-          return;
-        }
-
-        order.paymentStatus = "PAID";
-        order.paidAmount = payAmount;
-        order.paidAt = admin.database.ServerValue.TIMESTAMP;
-        order.paymentMethod = "DPAY";
-        order.transactionId = clientTxnId;
-
-        return order;
+      await orderRef.update({
+        paymentStatus: "PAID",
+        paidAmount: payAmount,
+        paidAt: admin.database.ServerValue.TIMESTAMP,
+        paymentMethod: "DPAY",
+        transactionId: clientTxnId,
       });
-
-      if (!orderTxn.committed) {
-        throw new Error("Order already paid");
-      }
       // ==========================
       //  🔔 SEND NOTIFICATION
       // ==========================
