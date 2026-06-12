@@ -698,10 +698,6 @@ app.post("/pay", async (req, res) => {
       const orderSnap = await orderRef.get();
       const orderData = orderSnap.val();
 
-      console.log("ORDER ID:", orderId);
-      console.log("ORDER DATA:", orderData);
-      console.log("PAYMENT STATUS:", orderData?.paymentStatus);
-
       if (!orderSnap.exists()) {
         throw new Error("Order not found");
       }
