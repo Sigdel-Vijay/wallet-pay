@@ -677,15 +677,6 @@ app.post("/pay", async (req, res) => {
         message: "Payment successful",
       });
     } else if (type !== null && type === "merchant_payment") {
-
-      const orderRef = db.ref(`orders/${orderId}`);
-      const orderSnap = await orderRef.get();
-      const orderData = orderSnap.val();
-
-      console.log("ORDER ID:", orderId);
-      console.log("ORDER DATA:", orderData);
-      console.log("PAYMENT STATUS:", orderData?.paymentStatus);
-
       // ==========================
       // 🔥 VALIDATE INPUT
       // ==========================
@@ -702,6 +693,14 @@ app.post("/pay", async (req, res) => {
           error: "Missing required fields",
         });
       }
+
+      const orderRef = db.ref(`orders/${orderId}`);
+      const orderSnap = await orderRef.get();
+      const orderData = orderSnap.val();
+
+      console.log("ORDER ID:", orderId);
+      console.log("ORDER DATA:", orderData);
+      console.log("PAYMENT STATUS:", orderData?.paymentStatus);
 
       if (!orderSnap.exists()) {
         throw new Error("Order not found");
