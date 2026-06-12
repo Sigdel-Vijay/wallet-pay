@@ -678,8 +678,8 @@ app.post("/pay", async (req, res) => {
       });
     } else if (type !== null && type === "merchant_payment") {
 
-
-      const orderSnap = await db.ref(`orders/${orderId}`).get();
+      const orderRef = db.ref(`orders/${orderId}`);
+      const orderSnap = await orderRef.get();
       const orderData = orderSnap.val();
 
       console.log("ORDER ID:", orderId);
