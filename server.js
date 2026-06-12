@@ -677,13 +677,14 @@ app.post("/pay", async (req, res) => {
         message: "Payment successful",
       });
     } else if (type !== null && type === "merchant_payment") {
-      
+
+
       const orderSnap = await db.ref(`orders/${orderId}`).get();
       const orderData = orderSnap.val();
 
-      if (orderData.paymentStatus === "PAID") {
-        throw new Error("Order already paid");
-      }
+      console.log("ORDER ID:", orderId);
+      console.log("ORDER DATA:", orderData);
+      console.log("PAYMENT STATUS:", orderData?.paymentStatus);
 
       // ==========================
       // 🔥 VALIDATE INPUT
@@ -701,8 +702,6 @@ app.post("/pay", async (req, res) => {
           error: "Missing required fields",
         });
       }
-
-      const orderSnap = await db.ref(`orders/${orderId}`).get();
 
       if (!orderSnap.exists()) {
         throw new Error("Order not found");
@@ -1017,7 +1016,8 @@ app.post("/pay", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("PAYMENT ERROR:", error);
+    console.error("FULL ERROR:", error);
+    console.error("ERROR MESSAGE:", error.message);
 
     // ==========================
     // 🔥 REMOVE TXN LOCK ON FAILURE
