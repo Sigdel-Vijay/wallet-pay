@@ -707,8 +707,6 @@ app.post("/pay", async (req, res) => {
         throw new Error("Order not found");
       }
 
-      const orderData = orderSnap.val();
-
       if (orderData.paymentStatus === "PAID") {
         throw new Error("Order already paid");
       }
