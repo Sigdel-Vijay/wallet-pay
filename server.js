@@ -677,21 +677,6 @@ app.post("/pay", async (req, res) => {
         message: "Payment successful",
       });
     } else if (type !== null && type === "merchant_payment") {
-      
-      const paymentLockRef = db.ref(`orderPaymentLocks/${orderId}`);
-
-      const lock = await paymentLockRef.transaction((data) => {
-        if (data) return;
-
-        return {
-          txnId: clientTxnId,
-          createdAt: admin.database.ServerValue.TIMESTAMP,
-        };
-      });
-
-      if (!lock.committed) {
-        throw new Error("Order already paid or processing");
-      }
 
 
       const orderRef = db.ref(`orders/${orderId}`);
